@@ -1,0 +1,628 @@
+---
+title: "Cyclistic Bike-Share Analysis"
+author: "Ahmed Nasser"
+date: "2024-03-03"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## **A summary of the content:**
+- Introduction.
+-	A clear statement of the business task.
+-	A description of all data sources used.
+-	Documentation of any cleaning or manipulation of data.
+-	A summary of the analysis.
+-	Supporting visualizations and key findings.
+-	The top three recommendations based on my analysis.
+
+
+## **Introduction:**
+In this project I will analyze the Cyclistic’s data to get insights and answer questions using the six steps of the data life cycle (Ask, Prepare, Process, Analyze, Share, and Act) using R for processing and cleaning, SQL for summarizing and analyzing, Tableau for visualizing the data, and PowerPoint for presenting the insights to answer the business task.
+
+### **1. Ask:** A clear statement of the business task.
+#####	We need to get insights to answer: How do annual members and casual riders use Cyclistic bikes differently?
+- **But first we need to know:**
+  a.	What is the weekly average ride length for casual and members riders?
+  b.	Is there a correlation between the seasons in Chicago and the number of rides?
+  c.	Is there a correlation between the seasons in Chicago and ride length?
+  d.	What is the average number of rides on each day of the week?
+  e.	What is the average ride length on each day of the week?
+  f.	Which stations do casual riders often visit?
+  g.	What is the most used bike_type for casual riders?
+
+### **2. Prepare:** A description of all data sources used.
+- I downloaded the previous 12 months data from this site https://divvy-tripdata.s3.amazonaws.com/index.html (from Jan-2023 till        Dec-2023) after making sure that this source is reliable, original, comprehensive, current, and cited.
+
+### **3. Process:** Documentation of any cleaning or manipulation of data.
+- **Collecting the data:**
+  a.	First downloading the data (12 separate csv files as file for each month).
+  b.	Unzip the files.
+  c.	Create a folder on my desktop to house the files. Use appropriate file-naming conventions.
+  d.	Create subfolders for the .csv file so that I have a copy of the original data. Move the downloaded files to the appropriate        subfolder.
+  e.	Open RStudio to merge all the 12 csv files together in one data frame as in the below code chunk:\
+  (I am using R language as the data is around 5 million records and Excel won’t handle it properly)
+
+```{R }
+library(tidyverse)
+library(data.table)
+df <- list.files(path = 'D:/Bike-share data/data/Bike-Share/', pattern = '*.csv') %>% 
+  map_df(~fread(.))
+head(df)
+```
+  I used the head() function to see if the data collected properly.
+  
+
+- Alternatively, we can use Python to collect the 12 csv files into one data frame as below:
+    ```
+    #import relevant libraries
+    import pandas as pd
+    import glob
+
+    #Get a list of all CSV files in a directory
+    csv_files = glob.glob('D:/Bike-share data/data/Bike-Share/*.csv')
+
+    #Create an empty dataframe to store the combined data
+    combined_df = pd.DataFrame()
+
+    #Loop through each CSV file and append its contents to the combined dataframe
+    for csv_file in csv_files:
+      df = pd.read_csv(csv_file)
+      combined_df = pd.concat([combined_df, df])
+    print(combined_df)
+    ```
+
+-	**Manipulate the data for better understanding:**
+    a. Use the colnames() function to see the column names.
+        ```{R }
+        colnames(df)
+        ```
+    b. Create a new variable called ride_length. Calculate the length of each ride by subtracting the column started_at from the column ended_at and divide it by 60 to convert to minutes, as in the below code chunk:
+        ```{R }
+        df <- mutate(df, ride_length=(ended_at-started_at)/60)
+        ```
+    c. Create a column called day_of_week, and calculate the day of the week that each ride started using the wday function, noting that 1 = Sunday and 7 = Saturday.
+        ```{R }
+        df <- mutate(df, day_of_week=wday(started_at))
+        ```
+    d. Converting the blank values to NA.
+        ```{R }
+        df <- df %>% mutate_at(c('ride_id','rideable_type','start_station_name','start_station_id','end_station_name','end_station_id', 'member_casual'), ~na_if(., ''))
+        ```
+    e. Creating another dataframe (df_cleaned) without the unwanted columns start_lat, start_lng, end_lat, end_lng, start_station_id, end_station_id because these columns won’t be needed for this analysis, and renaming rideable_type to bike_type and member_casual to customer_type.
+        ```{R }
+        df_cleaned <- df %>% 
+        select('ride_id','rideable_type', 'started_at', 'ended_at', 'start_station_name', 'end_station_name', 'member_casual', 'ride_length', 'day_of_week') %>% 
+        rename(bike_type=rideable_type, customer_type=member_casual)
+        ```
+
+- **Now we will export the data from R to MySQL database as it processes the data more quickly than RStudio.**
+    a. Install the RMySQL and DBI packages and load them.
+        ```{R eval=FALSE}
+        install.packages('RMySQL')
+        install.packages('DBI')
+        library(RMySQL)
+        library(DBI)
+        ```
+
+    b. Open MySQL and create an empty table on MySQL database with the same column names as following.
+    
+    ``` {r eval=FALSE}
+      CREATE TABLE bike_share (
+      ride_id		VARCHAR (45) NOT NULL,
+      bike_type		VARCHAR(45),
+      started_at		DATETIME,
+      ended_at		DATETIME,
+      start_station_name	VARCHAR(45),
+      end_station_name	VARCHAR(45),
+      customer_type	VARCHAR(45),
+      ride_length		FLOAT,
+      day_of_week		INT,
+      PRIMARY KEY (ride_id));
+    ```
+
+    c. On R run the below code to connect to the MySQL database that is hosted on the local machine.
+    ```{r eval=FALSE}
+        con <- dbConnect(MySQL(), user="user", password="pass", 
+                 dbname="database", host="localhost”)
+    ```
+
+    d. Then run the below code to view our tables that are in the database.
+        ```{R eval=FALSE}
+        dbListTables(con)
+        ```
+
+    e. Use the dbWriteTable() to export the R dataframe (df) to MySQL, then disconnect from the server.
+        ```{R eval=FALSE}
+        dbWriteTable(con, name= "bike_share", value= df, append= TRUE, temporary= FALSE, row.names = FALSE)
+        dbDisconnect(con)
+        ```
+
+    f. To make sure that the data is imported successfully to MySQL database we will run the below query.
+        ```{R eval=FALSE}
+        SELECT 
+            COUNT(*)
+        FROM
+            bike_share;
+        ```
+        ```
+        mysql> 5719877 row(s) returned.
+        ```
+        The count result for all the records is 5,719,877 which is the same as in the R dataframe.
+
+-	**Now it is time to run some calculations on the data to make sure it is clean and reliable.**
+    a. Count the ride_length records where equal or below 0 minutes and delete those records.
+        ```{R eval=FALSE}
+        SELECT 
+            COUNT(*)
+        FROM
+            bike_share
+        WHERE
+            ride_length <= 0;
+        ```
+        ```
+        mysql> 528row(s) returned.
+        ```
+
+        ```
+        DELETE FROM bike_share 
+        WHERE
+            ride_length <= 0;
+        ```
+        ```
+        mysql> 528row(s) affected.
+        ```
+    b. There are records with the same station name in start_station_name and end_station_name, with ride_length less than 1 minute, which means that the customer might have changed his mind and docked the bike back to the station.
+So we need to delete those records.
+        ```{R eval=FALSE}
+        SELECT 
+            COUNT(*)
+        FROM
+            bike_share
+        WHERE
+            ride_length < 1
+                AND start_station_name = end_station_name;
+        ```
+        ```
+        mysql> COUNT(*)
+               83501
+        ```
+        ```
+        DELETE FROM bike_share
+        WHERE
+            ride_length < 1 AND start_station_name = end_station_name;
+        ```
+        ```
+        mysql> 83501 row(s) affected.
+        ```
+    c. There are also records with null start_station_name and end_station_name and ride_length less than 1 minute, so we will delete it.
+        ```{R eval=FALSE}
+        SELECT 
+            COUNT(*)
+        FROM
+            bike_share
+        WHERE
+            start_station_name IS NULL
+                AND end_station_name IS NULL
+                AND ride_length < 1;
+        ```
+        ```
+        mysql> COUNT(*)
+	             41144
+        ```
+
+        ```
+        DELETE FROM bike_share 
+        WHERE
+            start_station_name IS NULL
+            AND end_station_name IS NULL
+            AND ride_length < 1;
+        ```
+
+        ```
+        mysql> 41144 row(s) affected.
+        ```
+
+    d.Remove (Temp) from start_station_name and end_station_name to make it more consistent.
+    ```{R eval=FALSE}
+        UPDATE bike_share 
+        SET 
+            end_station_name = REPLACE(end_station_name, ' (Temp)', ''),
+            start_station_name = REPLACE(start_station_name, ' (Temp)', '')
+        WHERE
+            end_station_name LIKE '% (Temp)'
+                OR start_station_name LIKE '% (Temp)';
+    ```
+
+    ```{R eval=FALSE}
+        mysql> 112695 row(s) affected Rows matched: 112695 Changed: 112695 Warnings: 0
+    ```
+    e. Search for outliers in the ride_length to avoid skewing our analysis.
+We can find the outliers by calculating the interquartile range (IQR) as below:
+
+        ```
+        SELECT ride_length_quartile, MAX(ride_length) AS quartile_break
+        FROM( SELECT ride_id, ride_length, NTILE(4) OVER (ORDER BY ride_length) AS ride_length_quartile
+        		FROM bike_share) AS quartiles
+        WHERE ride_length_quartile IN (1, 3)
+        GROUP BY ride_length_quartile;
+        ```
+        ```
+        mysql>
+        ride_length_quartile	quartile_break
+        1			5.7
+        3			17.2167
+        ```
+        IQR = Q3 - Q1 = 17.2167 - 5.7\
+        IQR = 11.5167\
+        High outlier > Q3 + (1.5 x IQR)\
+        Low outlier < Q1 - (1.5 x IQR)\
+        17.2167 + (1.5 x 11.5167) = 34.49175\
+        5.7 - (1.5 x 11.5167) = -11.57505\
+
+        ```
+        DELETE FROM bike_share 
+        WHERE
+            ride_length < - 11.57505
+            OR ride_length > 34.49175;
+        ```
+        ```
+        mysql> 412675 row(s) affected.
+        ```
+
+    f. Calculate the minimum and maximum ride_length. to make sure there are no outliers.
+        ```{R eval=FALSE}
+        SELECT 
+            MIN(ride_length) AS min_ride_length,
+            MAX(ride_length) AS max_ride_length
+        FROM
+            bike_share;
+        ```
+        ```
+        mysql> min_ride_length	max_ride_length
+	             0.15			34.4833
+        ```
+
+    g. Add new column Season and season_num.
+
+        ```{R eval=FALSE}
+        ALTER TABLE bike_share
+        ADD COLUMN Season VARCHAR(45)
+        ADD COLUMN season_num INT;
+        ```
+        ```
+        UPDATE bike_share 
+        SET 
+            season = CASE
+                WHEN month_number IN (12 , 1, 2) THEN 'Winter'
+                WHEN month_number IN (3 , 4, 5) THEN 'Spring'
+                WHEN month_number IN (6 , 7, 8) THEN 'Summer'
+                WHEN month_number IN (9 , 10, 11) THEN 'Fall'
+            END;
+        ```
+
+        ```
+        mysql> 5160876 row(s) affected Rows matched: 5160876  Changed: 5160876  Warnings: 0
+        ```
+
+        ```
+        UPDATE bike_share 
+        SET 
+            season_num = CASE
+                WHEN season = 'Winter' THEN 1
+                WHEN season = 'Spring' THEN 2
+                WHEN season = 'Summer' THEN 3
+                WHEN season = 'Fall' THEN 4
+            END;
+        ```
+        ```
+        mysql> 5160876 row(s) affected Rows matched: 5160876  Changed: 5160876  Warnings: 0
+        ```
+
+### **4. Analyze:** A summary of the analysis.
+-	**Now it is time for some exploration.**
+-	**What is the weekly average ride length for casual and members riders?**
+
+    a. Let’s first calculate the mode for each customer_type.
+    ```{R eval=FALSE}
+        CREATE TEMPORARY TABLE temp 
+        SELECT customer_type, day_of_week, COUNT(*) AS days
+		        FROM bike_share
+        		GROUP BY customer_type, day_of_week;
+    ```
+
+       ```{R eval=FALSE}
+       SELECT customer_type, day_of_week
+       FROM (SELECT day_of_week, COUNT(*) AS count_days
+       	FROM bike_share
+       	GROUP BY customer_type, day_of_week) t1,
+       	(SELECT customer_type, MAX(days) AS common_day
+       	FROM temp
+       	GROUP BY customer_type) t2
+       WHERE count_days=common_day;
+       ```
+
+       ```{R eval=FALSE}
+       mysql> 14 row(s) affected Records: 14  Duplicates: 0  Warnings: 0
+       mysql> customer_type	day_of_week
+              casual        7
+              member        5
+       ```
+
+    - **Now we know that the causal customers usually go for a ride on Sundays, while the member customers on Thursdays.**
+
+    b. Calculate the average ride_length and group by customer_type.
+      ```{R eval=FALSE}
+        SELECT 
+           customer_type,
+           AVG(ride_length) AS avg_ride_length
+        FROM
+           bike_share
+        GROUP BY customer_type;
+      ```
+
+       ```
+       mysql> customer_type	avg_ride_length
+       	       casual		    12.48
+       	       member   		10.37
+       ```
+    c. Calculate the weekly average ride_length per customer_type.
+    But first we will add week_number and month_number as we will need them in further analysis.
+       ```
+       ALTER TABLE bike_share
+       ADD COLUMN week_number INT,
+       ADD COLUMN month_number INT;
+       ```
+       ```
+       UPDATE bike_share 
+       SET 
+           week_number = WEEK(started_at),
+           month_number = month(started_at);
+       ```
+       ```
+       mysql> 0 row(s) affected Records: 0  Duplicates: 0  Warnings: 0
+       mysql> 5160876 row(s) affected Rows matched: 5160876  Changed: 5160876  Warnings: 0
+       ```
+       ```
+       SELECT 
+           t2.customer_type,
+           AVG(avg_ride_length) AS avg_weekly_ride_length
+       FROM
+           (SELECT 
+       	customer_type,
+               week_number,
+               AVG(ride_length) AS avg_ride_length
+           FROM
+               bike_share
+           GROUP BY customer_type, week_number
+           ORDER BY week_number) t2
+       GROUP BY t2.customer_type
+       ORDER BY avg_weekly_ride_length;
+       ```
+       ```
+       mysql> customer_type	avg_weekly_ride_length
+       	      casual		    11.625
+       	      member    		10.046
+       ```
+    - **The result shows that the average annual and weekly ride length for Causal rides is higher than Member rides.**
+
+-	**Is there a correlation between the seasons in Chicago and the number of rides?**
+    a. First let’s create a temporary table with the daily rides count and seasons number.
+        ```{R eval=FALSE}
+        CREATE TEMPORARY TABLE daily_rides_count
+        SELECT 
+        	Season, season_num, DATE(started_at) days, COUNT(ride_id) AS ride_count
+        FROM
+        	bike_share
+        GROUP BY season, season_num, days
+        ORDER BY days;
+        ```
+        ```
+        mysql> 365 row(s) affected Records: 365  Duplicates: 0  Warnings: 0
+        ```
+    b. Now we can calculate the correlation between the seasons and the number of rides.
+        ```{R eval=FALSE}
+        SELECT 
+            (AVG(season_num * ride_count) - AVG(season_num) * AVG(ride_count)) / 
+            (SQRT(AVG(season_num * season_num) - AVG(season_num) * AVG(season_num)) * 
+            SQRT(AVG(ride_count * ride_count) - AVG(ride_count) * AVG(ride_count))) AS correlation
+        FROM
+            daily_rides_count;
+        ```
+        ```
+        mysql> 0.588
+        ```
+      - The result is closer to +1 which means there is a strong correlation between the seasons and the number of rides.
+
+-	**Is there a correlation between the seasons in Chicago and ride length?**
+    a. Let’s create a temporary table with the daily rides average and seasons number.
+        ```{R eval=FALSE}
+        CREATE TEMPORARY TABLE avg_daily_rides
+        SELECT 
+        	Season, season_num, DATE(started_at) days, AVG(ride_length) AS avg_ride_length	
+        FROM
+        	bike_share
+        GROUP BY season, season_num, days
+        ORDER BY days;
+        ```
+        ```
+        mysql> 365 row(s) affected Records: 365  Duplicates: 0  Warnings: 0
+        ```
+    b. Now we can calculate the correlation between the seasons and the daily average ride length.
+        ```{R eval=FALSE}
+        SELECT 
+            (AVG(season_num * avg_ride_length) - AVG(season_num) * AVG(avg_ride_length)) / 
+            (SQRT(AVG(season_num * season_num) - AVG(season_num) * AVG(season_num)) * 
+            SQRT(AVG(avg_ride_length * avg_ride_length) - AVG(avg_ride_length) * AVG(avg_ride_length))) AS correlation
+        FROM
+            avg_daily_rides;
+        ```
+        ```
+        mysql> 0.423
+        ```
+    - The above score is moderate correlation which means there is a correlation between them but not strong.
+
+-	**What is the average number of rides on each day of the week?**
+    a. Calculate the average number of rides.
+        ```{R eval=FALSE}
+        SELECT 
+            DATE_FORMAT(daily, '%W') weekday,
+            t1.day_of_week,
+            ROUND(AVG(ride_num), 2) avg_ride_num
+        FROM
+            bike_share t1,
+            (SELECT 
+                DATE(started_at) daily, COUNT(ride_id) ride_num, day_of_week
+            FROM
+                bike_share
+            GROUP BY daily , day_of_week
+            ORDER BY daily) t2
+        WHERE
+            t1.day_of_week = t2.day_of_week
+        GROUP BY weekday , t1.day_of_week
+        ORDER BY t1.day_of_week;
+        ```
+        ```
+        mysql>  weekday	    day_of_week   avg_ride_num
+                Sunday      1             12147.92
+                Monday      2             12754.48
+                Tuesday     3             14564.71
+                Wednesday   4             14878.54
+                Thursday    5             15244.81
+                Friday	    6             14673.48
+                Saturday    7             14750.06
+        ```
+
+-	**What is the average ride length on each day of the week?**
+    a. Calculate the average ride length.
+        ```{R eval=FALSE}
+        SELECT 
+            DATE_FORMAT(started_at, '%W') weekday,
+            day_of_week,
+            ROUND(AVG(ride_length), 2) avg_ride_length
+        FROM
+            bike_share
+        GROUP BY weekday, day_of_week
+        ORDER BY day_of_week;
+        ```
+        ```
+        mysql>  weekday	  day_of_week	avg_ride_length
+                Sunday    1       		12.02
+                Monday    2       		10.61
+                Tuesday   3       		10.63
+                Wednesday 4       		10.56
+                Thursday  5       		10.68
+                Friday    6       		10.99
+                Saturday  7       		12.17
+        ```
+-	**Which stations do casual riders often visit?**
+    a. Calculate top 10 started from stations.
+        ```{R eval=FALSE}
+        SELECT start_station_name, COUNT(ride_id) rides_count
+        FROM bike_share
+        WHERE start_station_name IS NOT NULL AND customer_type = 'casual'
+        GROUP BY start_station_name
+        ORDER BY rides_count DESC
+        LIMIT 10;
+        ```
+        ```
+        mysql>  start_station_name                    rides_count
+                Streeter Dr & Grand Ave               30230
+                DuSable Lake Shore Dr & Monroe St     19468
+                DuSable Lake Shore Dr & North Blvd    15955
+                Michigan Ave & Oak St                 14588
+                Shedd Aquarium                        13154
+                Millennium Park                       12641
+                Theater on the Lake                   12298
+                Wells St & Concord Ln                 11056
+                Dusable Harbor                        10253
+                Clark St & Elm St                     9715
+        ```
+
+b.	Calculate top 10 visited stations.
+      ```{R eval=FALSE}
+        SELECT end_station_name, COUNT(ride_id) rides_count
+        FROM bike_share
+        WHERE end_station_name IS NOT NULL AND customer_type = 'casual'
+        GROUP BY end_station_name
+        ORDER BY rides_count DESC
+        LIMIT 10;
+      ```
+      ```{R eval=FALSE}
+        mysql>  end_station_name                      rides_count
+                Streeter Dr & Grand Ave               31244
+                DuSable Lake Shore Dr & North Blvd    17808
+                DuSable Lake Shore Dr & Monroe St     16690
+                Michigan Ave & Oak St                 15147
+                Millennium Park                       14747
+                Theater on the Lake                   12254
+                Shedd Aquarium                        11246
+                Wells St & Concord Ln                 10954
+                Clark St & Lincoln Ave                9628
+                Clark St & Armitage Ave               9535
+      ```
+
+-	**What is the most used bike_type for casual riders?**
+    a. Group by the bike_type with the count of rides.
+        ```{R eval=FALSE}
+        SELECT bike_type, COUNT(ride_id) rides_count
+        FROM bike_share
+        WHERE customer_type = 'casual'
+        GROUP BY bike_type
+        ORDER BY rides_count DESC;
+        ```
+        ```
+        mysql>  bike_type       rides_count
+                electric_bike   983407
+                classic_bike    702702
+                docked_bike     45048
+        ```
+
+### **5. Share: Supporting visualizations and key findings.**
+- **Now with the analysis we have made so far, we can create visuals using Tableau Public to help us to identify the trends and seasonality.** 
+    a. To move the data to Tableau Public we need to move it to RStudio and save it as .RData file.
+        ```{R eval=FALSE}
+        con <- dbConnect(MySQL(), user='user',password='pass', dbname='database',host='localhost')
+        df_cleaned <- dbReadTable(con, name= 'bike_share', row.names = FALSE)
+        dbDisconnect(con)
+        save(df_cleaned, file = 'bike_share.RData')
+        ```
+
+    b. Then open Tableau Public and chose Statistical File, then chose bike_share.RData.
+
+-	**Create a Dashboard with the analysis we have made in the previous steps to answer each question.**
+\
+\
+-	**Link to the created Tableau Story:**
+https://public.tableau.com/app/profile/ahmed.nasser.viz/viz/BikeShare_17087406050140/CyclisticStory
+
+### **6. Act: The top recommendations based on my analysis.**
+- **Conclusion:**
+    a. Casual riders usually go for a ride on Sundays, while member riders go on Thursdays.
+    b. Casual riders have a higher weekly ride length average (11.625) than member riders (10.046).
+    c. The correlation between the seasons and the number of rides is 0.588, which is closer to +1, meaning there is a strong correlation between them.
+    d. The correlation between the seasons and the daily average ride length is 0.423, which is a moderate correlation meaning there is a correlation between them, but it is not strong.
+    e. The number of rides increases on Saturday, Wednesday, and Thursday with the peak on Thursday.
+    f. The ride length increases on Saturday and Sunday with the peak on Saturday.
+    g. The top visited stations are Streeter Dr & Grand Ave, DuSable Lake Shore Dr & North Blvd, and DuSable Lake Shore Dr & Monroe St.
+    h. The most used bike type is the electric bike, followed by the classic bike.
+\
+\
+- **Recommendations:**
+    1. Launch a weekly and monthly package for riders who have a high average ride duration.
+    2. Seasonal offer with a discount for new members that starts from the end of spring until summer.
+    3. Create a special discount at weekends for members whose ride length is longer than 20 minutes.
+    4. Design merchandise such as shirts and water bottles with the company logo in the top areas.
+    5. Discount on parks tickets for members who arrive with Cyclistic bikes.
+    6. Increase the number of electric bikes in the docking stations.
+\
+\
+-	**Link to the PowerPoint presentation:**
+https://github.com/a7mdNasrr/Cyclistic-bike-share/blob/main/Bike%20Share%20Presentation.pptx
+\
+\
