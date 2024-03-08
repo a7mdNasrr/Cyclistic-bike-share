@@ -604,23 +604,20 @@ https://public.tableau.com/app/profile/ahmed.nasser.viz/viz/BikeShare_1708740605
 ### **6. Act: The top recommendations based on my analysis.**
 - **Conclusion:**
     a. Casual riders usually go for a ride on Sundays, while member riders go on Thursdays.
-    b. Casual riders have a higher weekly ride length average (11.625) than member riders (10.046).
-    c. The correlation between the seasons and the number of rides is 0.588, which is closer to +1, meaning there is a strong correlation between them.
-    d. The correlation between the seasons and the daily average ride length is 0.423, which is a moderate correlation meaning there is a correlation between them, but it is not strong.
-    e. The number of rides increases on Saturday, Wednesday, and Thursday with the peak on Thursday.
-    f. The ride length increases on Saturday and Sunday with the peak on Saturday.
-    g. The top visited stations are Streeter Dr & Grand Ave, DuSable Lake Shore Dr & North Blvd, and DuSable Lake Shore Dr & Monroe St.
-    h. The most used bike type is the electric bike, followed by the classic bike.
+    b. We found that casual riders tend to ride longer distances on average than member riders. Thus, introducing different packages would likely attract casual riders to subscribe.
+    c. There is a strong correlation between the number of rides and the seasons, with a noticeable increase starting from the end of the spring till the beginning of the fall, meaning that riders prefer hot weather.
+    d. Ride numbers increase on weekdays, but ride durations increase on weekends, indicating that casual riders spend more time riding on weekends when they have free time to spare.
+    e. Upon conducting an online search for the most visited stations, it was found that they are all located in or near parks, meaning they take the rides to visit the parks.
+    f. Electric bikes are the most used by both types of riders. They are equipped with a thumb throttle and pedal assist, which makes it easier to travel further and tackle steep hills.  
 \
-\
+
 - **Recommendations:**
     1. Launch a weekly and monthly package for riders who have a high average ride duration.
     2. Seasonal offer with a discount for new members that starts from the end of spring until summer.
-    3. Create a special discount at weekends for members whose ride length is longer than 20 minutes.
-    4. Design merchandise such as shirts and water bottles with the company logo in the top areas.
+    3. Create a special discount at weekends for members whose ride length is longer than 25 minutes.
+    4. Design merchandise such as shirts and water bottles with the company logo in the top visited parks.
     5. Discount on parks tickets for members who arrive with Cyclistic bikes.
-    6. Increase the number of electric bikes in the docking stations.
-\
+    6. Increase the number of electric bikes in the steep hills' areas.  
 \
 -	**Link to the PowerPoint presentation:**
 https://github.com/a7mdNasrr/Cyclistic-bike-share/blob/main/Bike%20Share%20Presentation.pptx
